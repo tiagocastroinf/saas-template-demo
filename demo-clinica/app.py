@@ -10,7 +10,7 @@ from google import genai
 from google.genai import types
 
 # ---------------------------------------------------------------
-# 1) PERSONALIZA AQUI para cada clínica a quem vais enviar a demo
+# 1) PERSONALIZA AQUI para cada clínica
 # ---------------------------------------------------------------
 NOME_CLINICA = "Clínica Dentária Sorriso"
 HORARIO = "Segunda a sexta, das 9h às 19h. Sábados das 9h às 13h."
@@ -52,30 +52,20 @@ PEDIDO_JSON: {{"nome": "...", "telefone": "...", "consulta": "...", "horario": "
 Substitui os "..." pelos dados da pessoa. Nunca escrevas esta linha antes de teres os quatro dados.
 
 REGRAS:
-- Nunca dês diagnósticos nem aconselhamento médico. Para dor forte, inchaço ou urgência, pede à pessoa para ligar para o 
-{TELEFONE}.
+- Nunca dês diagnósticos nem aconselhamento médico. Para dor forte, inchaço ou urgência, pede à pessoa para ligar para o {TELEFONE}.
 - Se não souberes algo, diz que a receção responde a essa questão e não inventes.
 - Não confirmes a marcação como definitiva: a receção é que confirma.
 """
 
-# ---------------------------------------------------------------
-
 MODELO = "gemini-2.0-flash"
-
-def obter_cliente():
-    """Garante que a chave de API é lida diretamente do ambiente a cada chamada."""
-    chave = os.environ.get("GEMINI_API_KEY")
-    if not chave:
-        raise ValueError("A variável GEMINI_API_KEY não está definida.")
-    return genai.Client(api_key=chave)
 
 PASTA = os.path.dirname(os.path.abspath(__file__))
 FICHEIRO_PEDIDOS = os.path.join(PASTA, "pedidos.csv")
 CAMPOS = ["recebido_em", "nome", "telefone", "consulta", "horario"]
 
 app = Flask(__name__, static_folder="static")
-conversas = {}  # uma conversa por visitante, em memória
-sessoes_com_pedido = set()  # evita guardar o mesmo pedido duas vezes
+historicos = {}  # guarda mensagens por sessao
+sessoes_com_pedido = set()
 
 
 def guardar_pedido(pedido):
@@ -91,7 +81,6 @@ def guardar_pedido(pedido):
 
 
 def extrair_pedido(texto):
-    """Separa a resposta visível do bloco PEDIDO_JSON no fim."""
     m = re.search(r"PEDIDO_JSON:\s*(\{.*\})", texto, re.DOTALL)
     if not m:
         return texto, None
@@ -123,7 +112,7 @@ def pedidos():
         return jsonify([])
     with open(FICHEIRO_PEDIDOS, newline="", encoding="utf-8-sig") as f:
         linhas = list(csv.DictReader(f))
-    return jsonify(linhas[::-1])  # mais recentes primeiro
+    return jsonify(linhas[::-1])
 
 
 @app.post("/chat")
@@ -135,30 +124,45 @@ def chat():
     if not texto:
         return jsonify(erro="Escreve uma mensagem."), 400
 
-    try:
-        client = obter_cliente()
-        
-        if sessao not in conversas:
-            conversas[sessao] = client.chats.create(
-                model=MODELO,
-                config=types.GenerateContentConfig(
-                    system_instruction=INSTRUCOES, temperature=0.4
-                ),
-            )
+    chave = os.environ.get("GEMINI_API_KEY")
+    if not chave:
+        print("ERRO: GEMINI_API_KEY nao encontrada no ambiente!")
+        return jsonify(erro="Chave de API não configurada."), 500
 
-        resposta = conversas[sessao].send_message(texto)
-        visivel, pedido = extrair_pedido(resposta.text or "")
+    client = genai.Client(api_key=chave)
+
+    if sessao not in historicos:
+        historicos[sessao] = []
+
+    # Adiciona mensagem do utilizador ao histórico da sessão
+    historicos[sessao].append(types.Content(role="user", parts=[types.Part.from_text(text=texto)]))
+
+    try:
+        res = client.models.generate_content(
+            model=MODELO,
+            contents=historicos[sessao],
+            config=types.GenerateContentConfig(
+                system_instruction=INSTRUCOES,
+                temperature=0.4
+            )
+        )
+
+        resposta_texto = res.text or ""
+
+        # Guarda a resposta do modelo no histórico
+        historicos[sessao].append(types.Content(role="model", parts=[types.Part.from_text(text=resposta_texto)]))
+
+        visivel, pedido = extrair_pedido(resposta_texto)
         if pedido and sessao not in sessoes_com_pedido:
             guardar_pedido(pedido)
             sessoes_com_pedido.add(sessao)
-            print("Novo pedido de marcação:", pedido)
+
         return jsonify(resposta=visivel, sessao=sessao)
+
     except Exception as e:
-        print("Erro da API:", e)
+        print("Erro na chamada Gemini:", e)
         return jsonify(erro="Não consegui responder agora. Tenta novamente."), 500
 
 
 if __name__ == "__main__":
-    if not os.environ.get("GEMINI_API_KEY"):
-        print("Falta definir a variável GEMINI_API_KEY (ver instruções).")
     app.run(debug=True)
