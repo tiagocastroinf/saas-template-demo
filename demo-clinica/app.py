@@ -11,7 +11,7 @@ from google import genai
 from google.genai import types
 
 # ---------------------------------------------------------------
-# 1) PERSONALIZA AQUI para cada clínica
+# 1) DADOS DA CLÍNICA
 # ---------------------------------------------------------------
 NOME_CLINICA = "Clínica Dentária Sorriso"
 HORARIO = "Segunda a sexta, das 9h às 19h. Sábados das 9h às 13h."
@@ -58,6 +58,7 @@ REGRAS:
 - Não confirmes a marcação como definitiva: a receção é que confirma.
 """
 
+# Modelo único e oficial
 MODELO = "gemini-3.8-flash"
 
 PASTA = os.path.dirname(os.path.abspath(__file__))
@@ -141,7 +142,7 @@ def chat():
     resposta_texto = None
     ultimo_erro = ""
 
-    # Tenta 3 vezes com o gemini-3.8-flash caso ocorra um pico temporario
+    # Tenta até 3 vezes com ligeira espera para dar tempo ao servidor da Google recuperar do pico
     for tentativa in range(3):
         try:
             res = client.models.generate_content(
@@ -156,12 +157,12 @@ def chat():
                 break
         except Exception as e:
             ultimo_erro = str(e)
-            print(f"Tentativa {tentativa+1} falhou com {MODELO}: {e}")
-            time.sleep(1)
+            print(f"Tentativa {tentativa + 1} falhou no {MODELO}: {e}")
+            time.sleep(1.5)  # Pausa de 1.5s entre tentativas
 
     if not resposta_texto:
-        historicos[sessao].pop()
-        return jsonify(erro=f"Erro de API ({MODELO}): {ultimo_erro[:150]}"), 500
+        historicos[sessao].pop()  # Remove a mensagem para não estragar a sessão
+        return jsonify(erro="O servidor da Google está momentaneamente sobrecarregado. Tenta de novo dentro de instantes."), 500
 
     historicos[sessao].append(
         types.Content(
