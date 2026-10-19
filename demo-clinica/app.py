@@ -59,7 +59,7 @@ REGRAS:
 
 # ---------------------------------------------------------------
 
-MODELO = "gemini-1.5-flash"
+MODELO = "gemini-2.5-flash"
 
 # Lê a chave diretamente do ambiente
 api_key = os.environ.get("GEMINI_API_KEY")
