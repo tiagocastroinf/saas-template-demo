@@ -57,8 +57,6 @@ REGRAS:
 - Não confirmes a marcação como definitiva: a receção é que confirma.
 """
 
-MODELO = "gemini-3.8-flash"
-
 PASTA = os.path.dirname(os.path.abspath(__file__))
 FICHEIRO_PEDIDOS = os.path.join(PASTA, "pedidos.csv")
 CAMPOS = ["recebido_em", "nome", "telefone", "consulta", "horario"]
@@ -115,6 +113,9 @@ def pedidos():
     return jsonify(linhas[::-1])
 
 
+MODELOS_DISPONIVEIS = ["gemini-2.5-flash", "gemini-1.5-flash"]
+
+
 @app.post("/chat")
 def chat():
     dados = request.get_json(silent=True) or {}
@@ -134,34 +135,42 @@ def chat():
     if sessao not in historicos:
         historicos[sessao] = []
 
-    # Adiciona mensagem do utilizador ao histórico da sessão
-    historicos[sessao].append(types.Content(role="user", parts=[types.Part.from_text(text=texto)]))
+    historicos[sessao].append(
+        types.Content(role="user", parts=[types.Part.from_text(text=texto)])
+    )
 
-    try:
-        res = client.models.generate_content(
-            model=MODELO,
-            contents=historicos[sessao],
-            config=types.GenerateContentConfig(
-                system_instruction=INSTRUCOES,
-                temperature=0.4
+    resposta_texto = None
+
+    # Tenta cada modelo da lista ate um responder com sucesso
+    for mod in MODELOS_DISPONIVEIS:
+        try:
+            res = client.models.generate_content(
+                model=mod,
+                contents=historicos[sessao],
+                config=types.GenerateContentConfig(
+                    system_instruction=INSTRUCOES, temperature=0.4
+                ),
             )
-        )
+            resposta_texto = res.text or ""
+            break  # Sucesso, sai do loop
+        except Exception as e:
+            print(f"Modelo {mod} falhou ({e}), a tentar o proximo...")
 
-        resposta_texto = res.text or ""
-
-        # Guarda a resposta do modelo no histórico
-        historicos[sessao].append(types.Content(role="model", parts=[types.Part.from_text(text=resposta_texto)]))
-
-        visivel, pedido = extrair_pedido(resposta_texto)
-        if pedido and sessao not in sessoes_com_pedido:
-            guardar_pedido(pedido)
-            sessoes_com_pedido.add(sessao)
-
-        return jsonify(resposta=visivel, sessao=sessao)
-
-    except Exception as e:
-        print("Erro na chamada Gemini:", e)
+    if not resposta_texto:
         return jsonify(erro="Não consegui responder agora. Tenta novamente."), 500
+
+    historicos[sessao].append(
+        types.Content(
+            role="model", parts=[types.Part.from_text(text=resposta_texto)]
+        )
+    )
+
+    visivel, pedido = extrair_pedido(resposta_texto)
+    if pedido and sessao not in sessoes_com_pedido:
+        guardar_pedido(pedido)
+        sessoes_com_pedido.add(sessao)
+
+    return jsonify(resposta=visivel, sessao=sessao)
 
 
 if __name__ == "__main__":
