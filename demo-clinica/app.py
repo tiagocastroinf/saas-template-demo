@@ -57,7 +57,7 @@ REGRAS:
 - Não confirmes a marcação como definitiva: a receção é que confirma.
 """
 
-MODELO = "gemini-2.0-flash"
+MODELO = "gemini-3.8-flash"
 
 PASTA = os.path.dirname(os.path.abspath(__file__))
 FICHEIRO_PEDIDOS = os.path.join(PASTA, "pedidos.csv")
