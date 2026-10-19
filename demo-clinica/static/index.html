@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html lang="pt-PT">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Assistente da clínica</title>
+<style>
+  :root {
+    --fundo: #eef3f4;
+    --painel: #ffffff;
+    --texto: #1c2b30;
+    --suave: #5d6f75;
+    --marca: #0f4c5c;
+    --balao-user: #0f4c5c;
+    --balao-bot: #e6eef0;
+    --linha: #d5e0e3;
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; margin: 0; }
+  body {
+    background: var(--fundo);
+    color: var(--texto);
+    font-family: "Segoe UI", system-ui, sans-serif;
+    display: flex; align-items: center; justify-content: center;
+    padding: 16px;
+  }
+  .janela {
+    width: 100%; max-width: 440px; height: min(680px, 100%);
+    background: var(--painel);
+    border: 1px solid var(--linha);
+    border-radius: 18px;
+    display: flex; flex-direction: column; overflow: hidden;
+  }
+  header { padding: 16px 20px; background: var(--marca); color: #fff; }
+  header h1 { margin: 0; font-size: 1.05rem; font-weight: 600; }
+  header p { margin: 2px 0 0; font-size: .85rem; opacity: .8; }
+  #mensagens {
+    flex: 1; overflow-y: auto; padding: 18px;
+    display: flex; flex-direction: column; gap: 10px;
+  }
+  .msg {
+    max-width: 82%; padding: 10px 14px; border-radius: 14px;
+    line-height: 1.45; white-space: pre-wrap; font-size: .95rem;
+  }
+  .bot { background: var(--balao-bot); align-self: flex-start; border-bottom-left-radius: 4px; }
+  .user { background: var(--balao-user); color: #fff; align-self: flex-end; border-bottom-right-radius: 4px; }
+  .a-escrever { color: var(--suave); font-style: italic; }
+  form { display: flex; gap: 8px; padding: 12px; border-top: 1px solid var(--linha); }
+  input {
+    flex: 1; padding: 12px 14px; font-size: 1rem; font-family: inherit;
+    border: 1px solid var(--linha); border-radius: 12px; color: var(--texto);
+  }
+  input:focus-visible, button:focus-visible { outline: 3px solid #7fb8c4; outline-offset: 1px; }
+  button {
+    padding: 0 18px; border: 0; border-radius: 12px; cursor: pointer;
+    background: var(--marca); color: #fff; font-size: 1rem; font-family: inherit;
+  }
+  button:disabled { opacity: .5; cursor: default; }
+</style>
+</head>
+<body>
+<main class="janela">
+  <header>
+    <h1 id="nome">Assistente</h1>
+    <p>Responde na hora, a qualquer hora</p>
+  </header>
+  <div id="mensagens" aria-live="polite"></div>
+  <form id="formulario">
+    <input id="texto" type="text" placeholder="Escreve a tua mensagem" autocomplete="off" maxlength="500">
+    <button id="enviar" type="submit">Enviar</button>
+  </form>
+</main>
+
+<script>
+  const caixa = document.getElementById("mensagens");
+  const form = document.getElementById("formulario");
+  const campo = document.getElementById("texto");
+  const botao = document.getElementById("enviar");
+  let sessao = null;
+
+  function adicionar(texto, quem, extra) {
+    const div = document.createElement("div");
+    div.className = "msg " + quem + (extra ? " " + extra : "");
+    div.textContent = texto;
+    caixa.appendChild(div);
+    caixa.scrollTop = caixa.scrollHeight;
+    return div;
+  }
+
+  fetch("/info").then(r => r.json()).then(d => {
+    document.getElementById("nome").textContent = d.nome;
+    adicionar("Olá! Sou o assistente da " + d.nome + ". Posso responder a dúvidas ou ajudar a marcar uma consulta.", "bot");
+  });
+
+  form.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const texto = campo.value.trim();
+    if (!texto) return;
+    adicionar(texto, "user");
+    campo.value = "";
+    botao.disabled = true;
+    const espera = adicionar("A escrever...", "bot", "a-escrever");
+    try {
+      const r = await fetch("/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ mensagem: texto, sessao: sessao })
+      });
+      const d = await r.json();
+      espera.remove();
+      if (d.erro) { adicionar(d.erro, "bot"); }
+      else { sessao = d.sessao; adicionar(d.resposta, "bot"); }
+    } catch (err) {
+      espera.remove();
+      adicionar("Sem ligação ao servidor. Verifica se o programa está a correr.", "bot");
+    }
+    botao.disabled = false;
+    campo.focus();
+  });
+</script>
+</body>
+</html>

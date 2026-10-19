@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="pt-PT">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Receção</title>
+<style>
+  :root {
+    --fundo: #eef3f4;
+    --painel: #ffffff;
+    --texto: #1c2b30;
+    --suave: #5d6f75;
+    --marca: #0f4c5c;
+    --linha: #d5e0e3;
+    --novo: #d9eef2;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; padding: 24px 16px;
+    background: var(--fundo); color: var(--texto);
+    font-family: "Segoe UI", system-ui, sans-serif;
+    display: flex; justify-content: center;
+  }
+  main {
+    width: 100%; max-width: 760px;
+    background: var(--painel); border: 1px solid var(--linha);
+    border-radius: 18px; overflow: hidden;
+  }
+  header { padding: 16px 20px; background: var(--marca); color: #fff; }
+  header h1 { margin: 0; font-size: 1.05rem; font-weight: 600; }
+  header p { margin: 2px 0 0; font-size: .85rem; opacity: .8; }
+  .tabela { overflow-x: auto; }
+  table { width: 100%; border-collapse: collapse; font-size: .95rem; }
+  th, td { text-align: left; padding: 12px 16px; border-bottom: 1px solid var(--linha); white-space: nowrap; }
+  th { color: var(--suave); font-weight: 600; font-size: .85rem; }
+  tr.novo td { animation: chegou 2.5s ease-out; }
+  @keyframes chegou { from { background: var(--novo); } to { background: transparent; } }
+  .vazio { padding: 28px 20px; color: var(--suave); }
+  @media (prefers-reduced-motion: reduce) { tr.novo td { animation: none; } }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <h1>Pedidos de marcação</h1>
+    <p>A receção só tem de confirmar por telefone</p>
+  </header>
+  <div class="tabela">
+    <table id="tabela" hidden>
+      <thead>
+        <tr><th>Recebido</th><th>Nome</th><th>Telefone</th><th>Consulta</th><th>Horário pedido</th></tr>
+      </thead>
+      <tbody id="corpo"></tbody>
+    </table>
+  </div>
+  <p class="vazio" id="vazio">Ainda não há pedidos. Faz uma marcação no chat e aparece aqui.</p>
+</main>
+
+<script>
+  const corpo = document.getElementById("corpo");
+  const tabela = document.getElementById("tabela");
+  const vazio = document.getElementById("vazio");
+  const campos = ["recebido_em", "nome", "telefone", "consulta", "horario"];
+  let conhecidos = null; // chaves já vistas, para destacar só os novos
+
+  function chave(p) { return campos.map(c => p[c]).join("|"); }
+
+  async function atualizar() {
+    try {
+      const r = await fetch("/pedidos");
+      const lista = await r.json();
+      const primeira = conhecidos === null;
+      corpo.textContent = "";
+      lista.forEach(p => {
+        const tr = document.createElement("tr");
+        if (!primeira && !conhecidos.has(chave(p))) tr.className = "novo";
+        campos.forEach(c => {
+          const td = document.createElement("td");
+          td.textContent = p[c] || "";
+          tr.appendChild(td);
+        });
+        corpo.appendChild(tr);
+      });
+      conhecidos = new Set(lista.map(chave));
+      tabela.hidden = lista.length === 0;
+      vazio.hidden = lista.length > 0;
+    } catch (e) { /* servidor desligado: tenta outra vez no próximo ciclo */ }
+  }
+
+  atualizar();
+  setInterval(atualizar, 3000);
+</script>
+</body>
+</html>
