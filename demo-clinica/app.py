@@ -59,8 +59,11 @@ REGRAS:
 
 # ---------------------------------------------------------------
 
-MODELO = "gemini-2.5-flash"
-client = genai.Client()  # lê a chave da variável de ambiente GEMINI_API_KEY
+MODELO = "gemini-1.5-flash"
+
+# Lê a chave diretamente do ambiente
+api_key = os.environ.get("GEMINI_API_KEY")
+client = genai.Client(api_key=api_key) if api_key else genai.Client()
 
 PASTA = os.path.dirname(os.path.abspath(__file__))
 FICHEIRO_PEDIDOS = os.path.join(PASTA, "pedidos.csv")
