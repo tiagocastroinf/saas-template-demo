@@ -2,7 +2,6 @@ import csv
 import json
 import os
 import re
-import time
 import uuid
 from datetime import datetime
 
@@ -10,9 +9,6 @@ from flask import Flask, jsonify, request, send_from_directory
 from google import genai
 from google.genai import types
 
-# ---------------------------------------------------------------
-# 1) PERSONALIZA AQUI para cada clínica
-# ---------------------------------------------------------------
 NOME_CLINICA = "Clínica Dentária Sorriso"
 HORARIO = "Segunda a sexta, das 9h às 19h. Sábados das 9h às 13h."
 MORADA = "Rua Exemplo, 123, Maia"
@@ -63,7 +59,7 @@ FICHEIRO_PEDIDOS = os.path.join(PASTA, "pedidos.csv")
 CAMPOS = ["recebido_em", "nome", "telefone", "consulta", "horario"]
 
 app = Flask(__name__, static_folder="static")
-historicos = {}  # guarda mensagens por sessao
+historicos = {}
 sessoes_com_pedido = set()
 
 
@@ -114,7 +110,12 @@ def pedidos():
     return jsonify(linhas[::-1])
 
 
-MODELOS_DISPONIVEIS = ["gemini-3.8-flash"]
+MODELOS_DISPONIVEIS = [
+    "gemini-2.5-flash",
+    "gemini-2.0-flash",
+    "gemini-1.5-flash",
+    "gemini-2.5-pro",
+]
 
 
 @app.post("/chat")
@@ -128,8 +129,7 @@ def chat():
 
     chave = os.environ.get("GEMINI_API_KEY")
     if not chave:
-        print("ERRO: GEMINI_API_KEY nao encontrada no ambiente!")
-        return jsonify(erro="Chave de API não configurada."), 500
+        return jsonify(erro="Chave GEMINI_API_KEY não encontrada."), 500
 
     client = genai.Client(api_key=chave)
 
@@ -141,29 +141,28 @@ def chat():
     )
 
     resposta_texto = None
+    ultimo_erro = ""
 
-    # Tenta cada modelo com mecanismos de tentativa para contornar picos temporarios (503)
     for mod in MODELOS_DISPONIVEIS:
-        for tentativa in range(2):
-            try:
-                res = client.models.generate_content(
-                    model=mod,
-                    contents=historicos[sessao],
-                    config=types.GenerateContentConfig(
-                        system_instruction=INSTRUCOES, temperature=0.4
-                    ),
-                )
-                resposta_texto = res.text or ""
+        try:
+            res = client.models.generate_content(
+                model=mod,
+                contents=historicos[sessao],
+                config=types.GenerateContentConfig(
+                    system_instruction=INSTRUCOES, temperature=0.4
+                ),
+            )
+            if res and res.text:
+                resposta_texto = res.text
                 break
-            except Exception as e:
-                print(f"Modelo {mod} tentativa {tentativa+1} falhou ({e})")
-                if "503" in str(e):
-                    time.sleep(1)  # Aguarda 1 segundo em caso de sobrecarga temporaria
-        if resposta_texto:
-            break
+        except Exception as e:
+            ultimo_erro = str(e)
+            print(f"Erro com {mod}: {e}")
 
     if not resposta_texto:
-        return jsonify(erro="Não consegui responder agora. Tenta novamente."), 500
+        # Se nenhum modelo responder, limpa a ultima mensagem do utilizador para nao corromper o historico
+        historicos[sessao].pop()
+        return jsonify(erro=f"Erro de API: {ultimo_erro[:150]}"), 500
 
     historicos[sessao].append(
         types.Content(
