@@ -9,6 +9,9 @@ from flask import Flask, jsonify, request, send_from_directory
 from google import genai
 from google.genai import types
 
+# ---------------------------------------------------------------
+# 1) PERSONALIZA AQUI para cada clínica
+# ---------------------------------------------------------------
 NOME_CLINICA = "Clínica Dentária Sorriso"
 HORARIO = "Segunda a sexta, das 9h às 19h. Sábados das 9h às 13h."
 MORADA = "Rua Exemplo, 123, Maia"
@@ -110,12 +113,7 @@ def pedidos():
     return jsonify(linhas[::-1])
 
 
-MODELOS_DISPONIVEIS = [
-    "gemini-2.5-flash",
-    "gemini-2.0-flash",
-    "gemini-1.5-flash",
-    "gemini-2.5-pro",
-]
+MODELOS_DISPONIVEIS = ["gemini-2.0-flash-exp", "gemini-1.5-flash-latest"]
 
 
 @app.post("/chat")
@@ -160,7 +158,6 @@ def chat():
             print(f"Erro com {mod}: {e}")
 
     if not resposta_texto:
-        # Se nenhum modelo responder, limpa a ultima mensagem do utilizador para nao corromper o historico
         historicos[sessao].pop()
         return jsonify(erro=f"Erro de API: {ultimo_erro[:150]}"), 500
 
