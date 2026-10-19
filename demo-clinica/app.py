@@ -2,6 +2,7 @@ import csv
 import json
 import os
 import re
+import time
 import uuid
 from datetime import datetime
 
@@ -113,7 +114,7 @@ def pedidos():
     return jsonify(linhas[::-1])
 
 
-MODELOS_DISPONIVEIS = ["gemini-2.5-flash", "gemini-1.5-flash"]
+MODELOS_DISPONIVEIS = ["gemini-3.8-flash"]
 
 
 @app.post("/chat")
@@ -141,20 +142,25 @@ def chat():
 
     resposta_texto = None
 
-    # Tenta cada modelo da lista ate um responder com sucesso
+    # Tenta cada modelo com mecanismos de tentativa para contornar picos temporarios (503)
     for mod in MODELOS_DISPONIVEIS:
-        try:
-            res = client.models.generate_content(
-                model=mod,
-                contents=historicos[sessao],
-                config=types.GenerateContentConfig(
-                    system_instruction=INSTRUCOES, temperature=0.4
-                ),
-            )
-            resposta_texto = res.text or ""
-            break  # Sucesso, sai do loop
-        except Exception as e:
-            print(f"Modelo {mod} falhou ({e}), a tentar o proximo...")
+        for tentativa in range(2):
+            try:
+                res = client.models.generate_content(
+                    model=mod,
+                    contents=historicos[sessao],
+                    config=types.GenerateContentConfig(
+                        system_instruction=INSTRUCOES, temperature=0.4
+                    ),
+                )
+                resposta_texto = res.text or ""
+                break
+            except Exception as e:
+                print(f"Modelo {mod} tentativa {tentativa+1} falhou ({e})")
+                if "503" in str(e):
+                    time.sleep(1)  # Aguarda 1 segundo em caso de sobrecarga temporaria
+        if resposta_texto:
+            break
 
     if not resposta_texto:
         return jsonify(erro="Não consegui responder agora. Tenta novamente."), 500
