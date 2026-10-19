@@ -2,6 +2,7 @@ import csv
 import json
 import os
 import re
+import time
 import uuid
 from datetime import datetime
 
@@ -56,6 +57,8 @@ REGRAS:
 - Se não souberes algo, diz que a receção responde a essa questão e não inventes.
 - Não confirmes a marcação como definitiva: a receção é que confirma.
 """
+
+MODELO = "gemini-3.8-flash"
 
 PASTA = os.path.dirname(os.path.abspath(__file__))
 FICHEIRO_PEDIDOS = os.path.join(PASTA, "pedidos.csv")
@@ -113,9 +116,6 @@ def pedidos():
     return jsonify(linhas[::-1])
 
 
-MODELOS_DISPONIVEIS = ["gemini-2.0-flash-exp", "gemini-1.5-flash-latest"]
-
-
 @app.post("/chat")
 def chat():
     dados = request.get_json(silent=True) or {}
@@ -141,10 +141,11 @@ def chat():
     resposta_texto = None
     ultimo_erro = ""
 
-    for mod in MODELOS_DISPONIVEIS:
+    # Tenta 3 vezes com o gemini-3.8-flash caso ocorra um pico temporario
+    for tentativa in range(3):
         try:
             res = client.models.generate_content(
-                model=mod,
+                model=MODELO,
                 contents=historicos[sessao],
                 config=types.GenerateContentConfig(
                     system_instruction=INSTRUCOES, temperature=0.4
@@ -155,11 +156,12 @@ def chat():
                 break
         except Exception as e:
             ultimo_erro = str(e)
-            print(f"Erro com {mod}: {e}")
+            print(f"Tentativa {tentativa+1} falhou com {MODELO}: {e}")
+            time.sleep(1)
 
     if not resposta_texto:
         historicos[sessao].pop()
-        return jsonify(erro=f"Erro de API: {ultimo_erro[:150]}"), 500
+        return jsonify(erro=f"Erro de API ({MODELO}): {ultimo_erro[:150]}"), 500
 
     historicos[sessao].append(
         types.Content(
