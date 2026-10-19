@@ -59,7 +59,7 @@ REGRAS:
 
 # ---------------------------------------------------------------
 
-MODELO = "gemini-3.8-flash"
+MODELO = "gemini-2.5-flash"
 client = genai.Client()  # lê a chave da variável de ambiente GEMINI_API_KEY
 
 PASTA = os.path.dirname(os.path.abspath(__file__))
