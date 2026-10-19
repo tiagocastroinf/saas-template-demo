@@ -52,7 +52,8 @@ PEDIDO_JSON: {{"nome": "...", "telefone": "...", "consulta": "...", "horario": "
 Substitui os "..." pelos dados da pessoa. Nunca escrevas esta linha antes de teres os quatro dados.
 
 REGRAS:
-- Nunca dês diagnósticos nem aconselhamento médico. Para dor forte, inchaço ou urgência, pede à pessoa para ligar para o {TELEFONE}.
+- Nunca dês diagnósticos nem aconselhamento médico. Para dor forte, inchaço ou urgência, pede à pessoa para ligar para o 
+{TELEFONE}.
 - Se não souberes algo, diz que a receção responde a essa questão e não inventes.
 - Não confirmes a marcação como definitiva: a receção é que confirma.
 """
@@ -60,9 +61,13 @@ REGRAS:
 # ---------------------------------------------------------------
 
 MODELO = "gemini-2.0-flash"
-# Lê a chave diretamente do ambiente
-api_key = os.environ.get("GEMINI_API_KEY")
-client = genai.Client(api_key=api_key) if api_key else genai.Client()
+
+def obter_cliente():
+    """Garante que a chave de API é lida diretamente do ambiente a cada chamada."""
+    chave = os.environ.get("GEMINI_API_KEY")
+    if not chave:
+        raise ValueError("A variável GEMINI_API_KEY não está definida.")
+    return genai.Client(api_key=chave)
 
 PASTA = os.path.dirname(os.path.abspath(__file__))
 FICHEIRO_PEDIDOS = os.path.join(PASTA, "pedidos.csv")
@@ -130,15 +135,17 @@ def chat():
     if not texto:
         return jsonify(erro="Escreve uma mensagem."), 400
 
-    if sessao not in conversas:
-        conversas[sessao] = client.chats.create(
-            model=MODELO,
-            config=types.GenerateContentConfig(
-                system_instruction=INSTRUCOES, temperature=0.4
-            ),
-        )
-
     try:
+        client = obter_cliente()
+        
+        if sessao not in conversas:
+            conversas[sessao] = client.chats.create(
+                model=MODELO,
+                config=types.GenerateContentConfig(
+                    system_instruction=INSTRUCOES, temperature=0.4
+                ),
+            )
+
         resposta = conversas[sessao].send_message(texto)
         visivel, pedido = extrair_pedido(resposta.text or "")
         if pedido and sessao not in sessoes_com_pedido:
